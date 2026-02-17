@@ -1,0 +1,7 @@
+*.png
+*.pdf
+*.pyc
+*.log
+.DS_Store
+.vscode/
+.julia/
