@@ -63,24 +63,28 @@ The program numerically solves this integral equation to obtain all bound states
 
 ### 1. Harmonic Region (Low Energy)
 Near the potential minimum, the spectrum is equally spaced:
+
 $$
 E_n \approx -1 + \frac{\omega}{\gamma}\left(n+\frac12\right)
 $$
 
 ### 2. Anharmonic Vibrational Spectrum
 As energy increases, the potential widens, causing the energy spacing to decrease (Birge–Sponer behavior):
+
 $$
 \Delta E_n = E_{n+1} - E_n
 $$
 
 ### 3. Near Dissociation (LeRoy–Bernstein Law)
 For a long-range $1/x^6$ tail, the levels cluster near the dissociation limit ($E=0$) following:
+
 $$
 E_n \propto -(n_D-n)^3
 $$
 
 ### 4. Semiclassical Interpretation
 Each bound state corresponds to a quantized phase-space orbit where the area is an integer multiple of Planck's constant:
+
 $$
 \oint p\,dx = (n+\tfrac12)h
 $$
