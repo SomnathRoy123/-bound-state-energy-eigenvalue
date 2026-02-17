@@ -116,12 +116,12 @@ WKB-LennardJones/
 using Pkg
 Pkg.activate(".")
 Pkg.instantiate()
-
+```
 ## Run the Analysis:
 
 ```julia
 julia scripts/run_analysis.jl
-
+```
 ## 👤 Author
 
 **Somnath Roy**
