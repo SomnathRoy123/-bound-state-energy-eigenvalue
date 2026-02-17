@@ -16,10 +16,6 @@ $$V(x) = 4 \left[ \left(\frac{1}{x}\right)^{12} - \left(\frac{1}{x}\right)^{6} \
 * **Wavefunction Reconstruction:** Reconstructs the semiclassical probability density $|\psi(x)|^2$ in the classically allowed region.
 * **Extensible:** Uses a `SystemParams` struct, making it easy to add new molecules (Nitrogen, Argon, etc.).
 
-## Visualizations
-![Energy Levels](results/energy_levels.png)
-*Fig 1: Bound states of Oxygen (Blue) and Hydrogen (Red) in the LJ well.*
-
 ## Dependencies
 * `QuadGK`
 * `Roots`
