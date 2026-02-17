@@ -1,117 +1,176 @@
 module LennardJonesWKB
 
-using QuadGK     # Standard library for adaptive integration
-using Roots      # Robust root finding (add via ] add Roots)
+using QuadGK
+using Roots
 using LinearAlgebra
 
-export SystemParams, potential, find_bound_states, wkb_wavefunction
+export SystemParams, potential, find_bound_states, wkb_wavefunction, harmonic_approx
 
-# --- 1. System Definition ---
+# ============================================================
+# 1. System Definition
+# ============================================================
+
 struct SystemParams
-    gamma::Float64  # Dimensionless quantum parameter (proportional to sqrt(mass))
+    gamma::Float64
     name::String
 end
 
-# The Lennard-Jones Potential: V(x) = 4(1/x^12 - 1/x^6)
-potential(x) = 4 * (x^(-12) - x^(-6))
+# Lennard-Jones potential  V(x)=4(1/x^12 − 1/x^6)
+potential(x) = 4*(x^-12 - x^-6)
 
-# Momentum function: p(x) = sqrt(E - V(x)) (scaled)
-function momentum(x, E)
-    V = potential(x)
-    return E > V ? sqrt(E - V) : 0.0
+# momentum p(x)=sqrt(E−V)
+momentum(x,E) = E > potential(x) ? sqrt(E - potential(x)) : 0.0
+
+
+# ============================================================
+# 2. Turning Points (ROBUST)
+# ============================================================
+
+function turning_points(E)
+
+    f(x) = potential(x) - E
+    r_eq = 2^(1/6)
+
+    # inner root
+    r_in = find_zero(f, (0.5, r_eq))
+
+    # adaptive search for outer root
+    r = r_eq*1.5
+    while f(r) < 0
+        r *= 1.5
+        r > 1e6 && error("Outer turning point not found")
+    end
+
+    r_out = find_zero(f, (r_eq, r))
+    return r_in, r_out
 end
 
-# --- 2. Action Integral S(E) ---
-# Calculates ∮ p(x) dx between turning points
+
+# ============================================================
+# 3. Action Integral  S(E)=∫ p dx
+# ============================================================
+
 function action_integral(E)
-    # 1. Find turning points (roots of V(x) - E = 0)
-    # For LJ, inner turning point is between 0.8 and 1.12, outer is > 1.12
-    # We find roots of potential(x) - E = 0
-    
-    r_eq = 2^(1/6) # Equilibrium position ~1.122
-    
-    # Root finding wrapper
-    V_diff(x) = potential(x) - E
-    
-    # Robustly find turning points using bracket search
-    r_in = find_zero(V_diff, (0.8, r_eq))
-    r_out = find_zero(V_diff, (r_eq, 10.0)) # Assuming E < 0 bound state
-    
-    # Integrate momentum between turning points using adaptive Gauss-Kronrod
-    integral, error = quadgk(x -> sqrt(E - potential(x)), r_in, r_out)
-    
-    return integral, r_in, r_out
+
+    r_in, r_out = turning_points(E)
+
+    integrand(x) = sqrt(max(E - potential(x), 0.0))
+
+    S, _ = quadgk(integrand, r_in, r_out, rtol=1e-10)
+
+    return S, r_in, r_out
 end
 
-# --- 3. Quantization Condition ---
-# Returns mismatch: S(E) - (n + 1/2)π/γ
-function quantization_condition(E, n, gamma)
-    integral, _, _ = action_integral(E)
-    target_action = (n + 0.5) * π / gamma
-    return integral - target_action
+
+# ============================================================
+# 4. WKB Quantization
+# 2γ∫pdx = π(2n+1)
+# ============================================================
+
+function quantization_condition(E, n, γ)
+    S, _, _ = action_integral(E)
+    return 2γ*S - π*(2n+1)
 end
 
-# --- 4. Main Solver ---
+
+# ============================================================
+# 5. Bound State Finder
+# ============================================================
+
 function find_bound_states(sys::SystemParams)
+
+    println("Solving for $(sys.name)  (γ=$(sys.gamma))")
+
     states = Float64[]
     n = 0
-    
-    println("Solving for $(sys.name) (γ = $(sys.gamma))...")
-    
+
+    Emin = -0.9999
+    Emax = -1e-8
+
     while true
-        # Define the function for which we want the root: f(E) = 0
+
         f(E) = quantization_condition(E, n, sys.gamma)
-        
-        # Check if a state exists:
-        # At the bottom of the well (E -> -1), the integral is 0.
-        # So f(-1) = -target < 0.
-        # We check if f(0) > 0 (meaning the action allows for this state before dissociation)
-        if f(-0.0001) < 0
-            break # No more bound states fit in the well
+
+        # state exists only if bracketed
+        if f(Emin)*f(Emax) > 0
+            break
         end
-        
-        # Find root between bottom of well (-1) and dissociation limit (0)
+
         try
-            # Search for energy E in [-0.999, -0.001]
-            E_n = find_zero(f, (-0.9999, -0.0001))
+            E_n = find_zero(f, (Emin, Emax), Bisection())
             push!(states, E_n)
-            println("  Found n=$n: E = $(round(E_n, digits=5))")
+            println("n=$n   E=$(round(E_n,digits=8))")
             n += 1
-        catch e
+        catch
             break
         end
     end
+
+    println("Total bound states = $(length(states))")
     return states
 end
 
-# --- 5. New Feature: Wavefunction Reconstruction ---
-# Reconstructs the semiclassical probability density |ψ|²
-function wkb_wavefunction(x_grid, E, sys::SystemParams)
-    # Find turning points
-    _, r_in, r_out = action_integral(E)
-    
-    psi_sq = zeros(length(x_grid))
-    
-    for (i, x) in enumerate(x_grid)
+
+# ============================================================
+# 6. WKB Wavefunction (CORRECT — includes tunneling tails)
+# ============================================================
+
+function wkb_wavefunction(xgrid, E, sys::SystemParams)
+
+    γ = sys.gamma
+    S, r_in, r_out = action_integral(E)
+
+    ψ2 = zeros(length(xgrid))
+
+    for (i,x) in enumerate(xgrid)
+
+        # -------- classically allowed --------
         if r_in < x < r_out
-            p = momentum(x, E)
-            # Standard WKB amplitude ∝ 1/p
-            # We ignore the oscillatory phase for the probability envelope plot
-            # to make it look cleaner, or we can include the cos^2 term.
-            
-            # Phase integral
-            S_x, _ = quadgk(y -> momentum(y, E), r_in, x)
-            phase = sys.gamma * S_x - π/4
-            
-            psi_sq[i] = (1/p) * cos(phase)^2
+
+            p = sqrt(E - potential(x))
+
+            Sx,_ = quadgk(y->sqrt(max(E - potential(y),0.0)), r_in, x)
+
+            phase = γ*Sx - π/4
+            ψ2[i] = cos(phase)^2 / p
+
+        # -------- forbidden left --------
+        elseif x < r_in
+
+            κ = sqrt(potential(x) - E)
+            Sx,_ = quadgk(y->sqrt(potential(y)-E), x, r_in)
+            ψ2[i] = exp(-2γ*Sx)/κ
+
+        # -------- forbidden right --------
         else
-            psi_sq[i] = 0.0 # Classical forbidden region (simple approx)
+            κ = sqrt(potential(x) - E)
+            Sx,_ = quadgk(y->sqrt(potential(y)-E), r_out, x)
+            ψ2[i] = exp(-2γ*Sx)/κ
         end
     end
-    
-    # Normalize roughly
-    psi_sq ./= sum(psi_sq) * (x_grid[2]-x_grid[1])
-    return psi_sq
+
+    # normalize
+    dx = xgrid[2]-xgrid[1]
+    ψ2 ./= sum(ψ2)*dx
+
+    return ψ2
+end
+
+
+# ============================================================
+# 7. Harmonic Approximation near minimum
+# ============================================================
+
+function harmonic_approx(n, γ)
+
+    x0 = 2^(1/6)
+
+    # exact curvature
+    Vpp = 4*(156/x0^14 - 42/x0^8)
+
+    ω = sqrt(Vpp)/γ
+
+    return -1 + (n+0.5)*ω
 end
 
 end
