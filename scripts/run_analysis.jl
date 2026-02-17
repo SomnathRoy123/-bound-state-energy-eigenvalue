@@ -71,3 +71,54 @@ if length(E_O2) > 5
     legend()
     savefig("wavefunction_n5.png")
 end
+
+
+function plot_birge_sponer(states, molecule_name)
+    # Calculate energy differences (Delta E)
+    delta_E = diff(states)
+    n_values = 0:(length(delta_E)-1)
+    
+    figure()
+    plot(n_values, delta_E, "o-", markersize=8, label="WKB Spacing")
+    
+    # Linear fit to show deviation (Anharmonicity)
+    # Ideally, this curve hits 0 at the dissociation limit
+    xlabel("Quantum Number n")
+    ylabel("Energy Gap ΔE (E_{n+1} - E_n)")
+    title("Birge-Sponer Plot: Anharmonicity of $molecule_name")
+    grid(true)
+    legend()
+    savefig("birge_sponer_$molecule_name.png")
+end
+
+# Usage:
+plot_birge_sponer(E_O2, "Oxygen")
+
+
+
+
+function plot_phase_space(sys::LennardJonesWKB.SystemParams, states)
+    figure(figsize=(8,8))
+    x_fine = range(0.8, 2.5, length=500)
+    
+    for (n, E) in enumerate(states)
+        # Calculate momentum p(x) for this energy
+        p = [LennardJonesWKB.momentum(x, E) for x in x_fine]
+        
+        # Filter out real parts only (where E > V)
+        mask = p .> 0
+        
+        # Plot top and bottom half of the orbit
+        plot(x_fine[mask], p[mask], color="black", alpha=0.5)
+        plot(x_fine[mask], -p[mask], color="black", alpha=0.5)
+    end
+    
+    xlabel("Position x")
+    ylabel("Momentum p")
+    title("Phase Space Trajectories (Quantized Orbits)")
+    grid(true)
+    savefig("phase_space_orbits.png")
+end
+
+# Usage:
+plot_phase_space(oxygen, E_O2)
