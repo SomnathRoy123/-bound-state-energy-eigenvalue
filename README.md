@@ -105,6 +105,7 @@ WKB-LennardJones/
 ├── test/                     # Unit tests for correctness
 └── README.md                 # Project documentation
 
+```
 
 ## 🚀 Installation & Usage
 
